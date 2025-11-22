@@ -13,28 +13,31 @@ app.get('/api/search', async (req, res) => {
     const api = new Meting(API_SOURCE);
     const result = await api.search(keyword);
     
-    // 先解析 JSON
+    // 第一次解析
     const parsed = JSON.parse(result);
     
-    // 检查返回的数据结构
-    let list = [];
-    if (Array.isArray(parsed)) {
-      list = parsed;
-    } else if (parsed.data && Array.isArray(parsed.data)) {
-      list = parsed.data;
+    // 获取歌曲列表（在 result.songs 路径下）
+    let songs = [];
+    if (parsed.result && Array.isArray(parsed.result.songs)) {
+      songs = parsed.result.songs;
     } else {
-      // 如果都不是，直接返回原始数据便于调试
-      return res.json({ raw: parsed, error: 'Unexpected data structure' });
+      return res.status(500).json({ 
+        error: 'Unexpected data structure',
+        data: parsed 
+      });
     }
 
     // 取前 count 条
-    const limited = list.slice(0, count);
+    const limited = songs.slice(0, count);
 
-    const formatted = limited.map(v => ({
-      id: v.id,
-      name: v.name,
-      artist: v.artist || v.artist_name,
-      pic: v.pic || v.cover
+    // 格式化输出
+    const formatted = limited.map(song => ({
+      id: song.id,
+      name: song.name,
+      artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+      album: song.al ? song.al.name : '',
+      pic: song.al ? song.al.picUrl : '',
+      duration: song.dt
     }));
 
     res.json(formatted);
@@ -52,24 +55,40 @@ app.get('/api/url', async (req, res) => {
     const result = await api.url(id);
     
     const parsed = JSON.parse(result);
-    res.json(parsed);
+    
+    // 网易云返回的 URL 数据结构
+    if (parsed.data && Array.isArray(parsed.data) && parsed.data.length > 0) {
+      res.json({
+        url: parsed.data[0].url,
+        br: parsed.data[0].br,
+        size: parsed.data[0].size,
+        type: parsed.data[0].type
+      });
+    } else {
+      res.json(parsed);
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// 添加一个调试接口，查看原始返回数据
+// 调试接口（可选，部署后可以删除）
 app.get('/api/debug', async (req, res) => {
   try {
     const keyword = req.query.keyword || '测试';
     const api = new Meting(API_SOURCE);
     const result = await api.search(keyword);
     
+    const parsed = JSON.parse(result);
+    
     res.json({
-      raw: result,
-      parsed: JSON.parse(result),
-      type: typeof JSON.parse(result),
-      isArray: Array.isArray(JSON.parse(result))
+      raw: result.substring(0, 500) + '...', // 只显示前500字符
+      structure: {
+        hasResult: !!parsed.result,
+        hasSongs: !!(parsed.result && parsed.result.songs),
+        songsCount: parsed.result?.songs?.length || 0,
+        firstSong: parsed.result?.songs?.[0] || null
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
