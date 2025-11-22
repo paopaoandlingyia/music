@@ -1,0 +1,35 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/paopaoandlingyia/music:latest
+            ghcr.io/paopaoandlingyia/music:${{ github.sha }}
+      
+      - name: Deploy to server (optional)
+        if: false  # 如果有服务器可以启用
+        run: |
+          # SSH 到服务器并拉取镜像
+          # ssh user@server "docker pull ghcr.io/paopaoandlingyia/music:latest"
