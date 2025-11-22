@@ -5,6 +5,7 @@ const app = express();
 
 const API_SOURCE = 'netease';
 
+// ✅ 原有的搜索接口（保留）
 app.get('/search', async (req, res) => {
   try {
     const keyword = req.query.keyword || '';
@@ -42,6 +43,7 @@ app.get('/search', async (req, res) => {
   }
 });
 
+// ✅ 原有的 URL 接口（保留）
 app.get('/url', async (req, res) => {
   try {
     const id = req.query.id;
@@ -67,8 +69,73 @@ app.get('/url', async (req, res) => {
   }
 });
 
-// ✅ 从环境变量读取端口，默认 3000
-// ✅ 监听 0.0.0.0（重要！）
+// 🌟 新增：一键获取完整信息（搜索 + URL）
+app.get('/music', async (req, res) => {
+  try {
+    const keyword = req.query.keyword || '';
+    const count = parseInt(req.query.count) || 1;
+
+    const api = new Meting(API_SOURCE);
+    
+    // 第一步：搜索
+    const searchResult = await api.search(keyword);
+    const searchParsed = JSON.parse(searchResult);
+    
+    let songs = [];
+    if (searchParsed.result && Array.isArray(searchParsed.result.songs)) {
+      songs = searchParsed.result.songs;
+    } else {
+      return res.status(500).json({ 
+        error: 'Search failed',
+        data: searchParsed 
+      });
+    }
+
+    const limited = songs.slice(0, count);
+
+    // 第二步：为每首歌获取播放链接
+    const results = await Promise.all(
+      limited.map(async (song) => {
+        try {
+          const urlResult = await api.url(song.id);
+          const urlParsed = JSON.parse(urlResult);
+          
+          let playUrl = null;
+          if (urlParsed.data && Array.isArray(urlParsed.data) && urlParsed.data.length > 0) {
+            playUrl = urlParsed.data[0].url;
+          }
+
+          return {
+            id: song.id,
+            name: song.name,
+            artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+            album: song.al ? song.al.name : '',
+            pic: song.al ? song.al.picUrl : '',
+            duration: song.dt,
+            url: playUrl  // ✅ 直接包含播放链接
+          };
+        } catch (err) {
+          // 某首歌获取失败，返回 null url
+          return {
+            id: song.id,
+            name: song.name,
+            artist: song.ar ? song.ar.map(a => a.name).join('/') : '',
+            album: song.al ? song.al.name : '',
+            pic: song.al ? song.al.picUrl : '',
+            duration: song.dt,
+            url: null,
+            error: err.message
+          };
+        }
+      })
+    );
+
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Meting music API running on port ${PORT}`);
