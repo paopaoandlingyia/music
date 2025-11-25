@@ -136,6 +136,32 @@ app.get('/music', async (req, res) => {
   }
 });
 
+// 新增：歌词接口
+app.get('/lyric', async (req, res) => {
+  try {
+    const id = req.query.id; // 获取歌曲 ID 参数
+    if (!id) return res.status(400).json({ error: "missing id" });
+
+    const api = new Meting(API_SOURCE);
+    const result = await api.lyric(id); // 调用 Meting 的歌词 API 方法
+    
+    const parsed = JSON.parse(result); // 解析响应的 JSON 数据
+    
+    if (parsed.nolyric) {
+      // 如果歌曲无歌词
+      res.json({ lyrics: null, hint: 'No lyrics available.' });
+    } else if (parsed.lrc && parsed.lrc.lyric) {
+      // 提取歌词内容（lrc 格式）
+      res.json({ lyrics: parsed.lrc.lyric });
+    } else {
+      // 意外情况
+      res.status(500).json({ error: 'Unexpected lyric format', data: parsed });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message }); // 异常处理
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Meting music API running on port ${PORT}`);
